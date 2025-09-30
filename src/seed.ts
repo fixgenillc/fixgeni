@@ -2,53 +2,56 @@
 import { PrismaClient } from "@prisma/client";
 
 /**
- * Seeds base data the first time the app runs.
- * Returns true if we seeded, false if data already existed.
+ * Idempotent seed for initial KB categories.
+ * - Safe to run on every boot.
+ * - Uses `upsert` by unique `slug`.
  */
-export async function seedIfNeeded(prisma: PrismaClient): Promise<boolean> {
-  // Only seed if there are no categories yet
-  const count = await prisma.category.count();
-  if (count > 0) return false;
-
-  console.log("⏳ Seeding base categories...");
-
+export async function runSeed(prisma: PrismaClient) {
   const categories = [
     { slug: "plumbing", name: "Plumbing" },
     { slug: "electrical", name: "Electrical" },
     { slug: "hvac", name: "HVAC" },
+    { slug: "appliances", name: "Appliances" },
+    { slug: "roofing", name: "Roofing" },
   ];
 
-  await prisma.category.createMany({
-    data: categories.map((c) => ({ ...c, isActive: true })),
-    skipDuplicates: true,
-  });
-
-  // Optional: add one sample KB article
-  const plumbing = await prisma.category.findUnique({ where: { slug: "plumbing" } });
-  if (plumbing) {
-    await prisma.kbArticle.upsert({
-      where: { slug: "fix-running-toilet" },
-      update: {},
+  for (const c of categories) {
+    await prisma.category.upsert({
+      where: { slug: c.slug },
+      update: {
+        name: c.name,
+        isActive: true, // ensure active if it already exists
+      },
       create: {
-        slug: "fix-running-toilet",
-        title: "Fix a Running Toilet (Fill Valve & Flapper)",
-        categoryId: plumbing.id,
-        content: "<h2>Overview</h2><p>Check flapper, chain, fill valve.</p>",
-        difficulty: "easy",
-        timeEstimateMin: 30,
-        toolsJson: [
-          { name: "Adjustable Wrench", purpose: "Loosen/tighten nuts", affiliate_url: "https://www.amazon.com/s?k=adjustable+wrench" },
-        ] as any,
-        stepsJson: [
-          "Turn off water supply at the shutoff valve.",
-          "Inspect/replace flapper.",
-          "Adjust float height or replace fill valve.",
-        ] as any,
-        status: "published",
+        slug: c.slug,
+        name: c.name,
+        isActive: true,
       },
     });
   }
+}
 
-  console.log("✅ Seed done");
-  return true;
+/**
+ * Seed only if there are no categories yet (or if override env is set).
+ * Called from server.ts after the app starts listening so health checks pass fast.
+ *
+ * To force seeding on a running instance, set env:
+ *   FORCE_SEED=true
+ */
+export async function seedIfNeeded(prisma: PrismaClient): Promise<boolean> {
+  try {
+    const force = (process.env.FORCE_SEED ?? "").toLowerCase() === "true";
+    const count = await prisma.category.count();
+
+    if (!force && count > 0) {
+      // Already seeded — skip
+      return false;
+    }
+
+    await runSeed(prisma);
+    return true;
+  } catch (err) {
+    console.error("Seed failed:", err);
+    throw err;
+  }
 }
