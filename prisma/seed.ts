@@ -1,34 +1,48 @@
-import { PrismaClient } from "@prisma/client";
-
+import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
-export async function seedIfNeeded() {
-  // check if categories already exist
-  const count = await prisma.category.count();
-  if (count > 0) {
-    return { seeded: false, count };
+async function run() {
+  // mirrors the seed() in server.ts
+  // keep one source of truth if possible—either here OR in server.ts
+  const categories = [{ name: 'Plumbing' }, { name: 'Electrical' }, { name: 'HVAC' }];
+
+  const catRecords = [];
+  for (const c of categories) {
+    const rec = await prisma.category.upsert({
+      where: { name: c.name },
+      update: { name: c.name },
+      create: { name: c.name },
+    });
+    catRecords.push(rec);
   }
 
-  const categories = [
-    { name: "Plumbing", slug: "plumbing", isActive: true },
-    { name: "Electrical", slug: "electrical", isActive: true },
-    { name: "Carpentry", slug: "carpentry", isActive: true },
-    { name: "Painting", slug: "painting", isActive: true },
+  const subs: Array<{ name: string; categoryName: string }> = [
+    { name: 'Leaks & Fixtures', categoryName: 'Plumbing' },
+    { name: 'Water Heaters',    categoryName: 'Plumbing' },
+    { name: 'Lighting',         categoryName: 'Electrical' },
+    { name: 'Outlets',          categoryName: 'Electrical' },
+    { name: 'Thermostats',      categoryName: 'HVAC' },
+    { name: 'Air Quality',      categoryName: 'HVAC' },
   ];
 
-  await prisma.category.createMany({ data: categories });
-  return { seeded: true, count: categories.length };
+  for (const s of subs) {
+    const cat = catRecords.find(c => c.name === s.categoryName)!;
+    await prisma.subCategory.create({
+      data: { name: s.name, categoryId: cat.id },
+    }).catch(async () => {
+      const existing = await prisma.subCategory.findFirst({
+        where: { name: s.name, categoryId: cat.id }
+      });
+      if (!existing) {
+        await prisma.subCategory.create({ data: { name: s.name, categoryId: cat.id } });
+      }
+    });
+  }
+
+  const totalCats = await prisma.category.count();
+  const totalSubs = await prisma.subCategory.count();
+  const totalBiz  = await prisma.business.count();
+  console.log({ totalCats, totalSubs, totalBiz });
 }
 
-// if you want to run `npx ts-node prisma/seed.ts` manually
-if (require.main === module) {
-  seedIfNeeded()
-    .then((res) => {
-      console.log("Seeding complete:", res);
-      process.exit(0);
-    })
-    .catch((err) => {
-      console.error("Seeding failed:", err);
-      process.exit(1);
-    });
-}
+run().finally(() => prisma.$disconnect());
