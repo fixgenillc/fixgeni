@@ -1,5 +1,5 @@
-// This file defines your database models for Prisma
-
+// prisma/schema.prisma
+// --- Prisma Client generator & Postgres datasource ---
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,19 +9,50 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Category {
-  id    Int    @id @default(autoincrement())
-  name  String @unique
-  // You can add description, slug, etc later if you need
+// --- Enums used by KB articles ---
+enum Difficulty {
+  easy
+  medium
+  hard
 }
 
-// Example future model for Knowledge Base entries
-model KnowledgeBase {
-  id          Int      @id @default(autoincrement())
-  title       String
-  content     String
-  categoryId  Int
-  category    Category @relation(fields: [categoryId], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+enum ArticleStatus {
+  draft
+  published
+  archived
+}
+
+// --- Core models ---
+
+model Category {
+  id         Int         @id @default(autoincrement())
+  slug       String      @unique
+  name       String
+  isActive   Boolean     @default(true)
+  createdAt  DateTime    @default(now())
+
+  // Relation: one Category -> many KbArticles
+  articles   KbArticle[]
+
+  @@index([slug])
+}
+
+model KbArticle {
+  id              Int           @id @default(autoincrement())
+  slug            String        @unique
+  title           String
+  content         String        // could be HTML/markdown string
+  difficulty      Difficulty    @default(easy)
+  timeEstimateMin Int           @default(0)
+  toolsJson       Json          @default("[]")
+  stepsJson       Json          @default("[]")
+  status          ArticleStatus @default(published)
+  createdAt       DateTime      @default(now())
+
+  // Foreign key
+  categoryId      Int
+  category        Category      @relation(fields: [categoryId], references: [id])
+
+  @@index([categoryId])
+  @@index([slug])
 }
