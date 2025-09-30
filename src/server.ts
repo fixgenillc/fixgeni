@@ -1,5 +1,5 @@
-// src/server.ts
-import express, { Request, Response } from "express";
+import "dotenv/config";
+import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
@@ -8,60 +8,72 @@ import { seedIfNeeded } from "./seed";
 
 const app = express();
 const prisma = new PrismaClient();
-const PORT = process.env.PORT ? Number(process.env.PORT) : 10000;
 
-app.use(express.json());
-app.use(cors());
 app.use(helmet());
-app.use(morgan("tiny"));
+app.use(cors());
+app.use(express.json());
+app.use(morgan("dev"));
 
-// --- Health endpoints ---
-app.get("/health", (_req: Request, res: Response) => res.status(200).send("ok"));
-app.get("/_health", (_req: Request, res: Response) => res.status(200).json({ ok: true }));
+/** Health checks */
+app.get("/health", (_req, res) => res.status(200).send("ok"));
+app.get("/_health", (_req, res) => res.status(200).send("ok"));
 
-// --- List KB categories ---
-app.get("/api/kb/categories", async (_req: Request, res: Response) => {
+/** Seed status (includes updatedAt) */
+app.get("/api/kb/seed-status", async (_req, res) => {
   try {
-    const cats = await prisma.category.findMany({
+    const count = await prisma.category.count();
+    const latest = await prisma.category.findFirst({
+      orderBy: { updatedAt: "desc" },
+      select: { id: true, slug: true, name: true, updatedAt: true },
+    });
+    res.json({ categoryCount: count, latest });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "seed-status failed" });
+  }
+});
+
+/** Public categories (includes updatedAt) */
+app.get("/api/kb/categories", async (_req, res) => {
+  try {
+    const items = await prisma.category.findMany({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
       select: {
         id: true,
         slug: true,
         name: true,
-        isActive: true,
         createdAt: true,
-        updatedAt: true,   // ✅ only works if schema has updatedAt
+        updatedAt: true, // <-- kept
       },
-      orderBy: { name: "asc" },
     });
-    res.json({ items: cats });
-  } catch (err) {
-    console.error("GET /api/kb/categories error:", err);
-    res.status(500).json({ error: "Failed to load categories" });
-  }
-});
-
-// --- Optional seed status ---
-app.get("/api/kb/seed-status", async (_req, res) => {
-  try {
-    const count = await prisma.category.count();
-    res.json({ categoryCount: count });
+    res.json({ items });
   } catch (e) {
-    res.status(500).json({ error: "status check failed" });
+    console.error(e);
+    res.status(500).json({ error: "categories fetch failed" });
   }
 });
 
-// --- Start server, then run seed ---
-app.listen(PORT, () => {
-  console.log(`FixGeni API listening on :${PORT}`);
-  seedIfNeeded(prisma)
-    .then((didSeed) => {
-      if (didSeed) console.log("✅ Seed completed");
-      else console.log("ℹ️ Seed skipped (already seeded)");
-    })
-    .catch((e) => console.error("❌ Seed error", e));
+/** Boot */
+const port = Number(process.env.PORT || 10000);
+app.listen(port, async () => {
+  console.log(`FixGeni API listening on :${port}`);
+
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    console.log("DB connection verified");
+  } catch (e) {
+    console.error("DB connection failed", e);
+  }
+
+  // Idempotent auto-seed on boot
+  try {
+    const didSeed = await seedIfNeeded(prisma);
+    console.log(didSeed ? "Seed completed" : "Seed skipped");
+  } catch (e) {
+    console.error("Seed error", e);
+  }
 });
 
-process.on("SIGTERM", async () => {
-  await prisma.$disconnect();
-  process.exit(0);
-});
+/** (Optional) last-resort 404 so bad paths don’t look like crashes */
+app.use((_req, res) => res.status(404).json({ error: "Not found" }));
