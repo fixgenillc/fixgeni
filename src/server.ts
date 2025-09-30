@@ -1,71 +1,62 @@
-import express from "express";
+// src/server.ts
+import express, { Request, Response } from "express";
+import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
-import cors from "cors";
 import { PrismaClient } from "@prisma/client";
-import { seedIfNeeded } from "../prisma/seed"; // make sure seed.ts is in /prisma
+import { seedIfNeeded } from "./seed";
 
 const app = express();
 const prisma = new PrismaClient();
+const PORT = process.env.PORT ? Number(process.env.PORT) : 10000;
 
-app.use(helmet());
-app.use(cors());
 app.use(express.json());
+app.use(cors());
+app.use(helmet());
 app.use(morgan("tiny"));
 
-// ---- health ----
-app.get("/health", (_req, res) => res.status(200).send("ok"));
-app.get("/_health", (_req, res) => res.status(200).send("ok"));
+// --- Health endpoints (used by Render) ---
+app.get("/health", (_req: Request, res: Response) => res.status(200).send("ok"));
+app.get("/_health", (_req: Request, res: Response) => res.status(200).json({ ok: true }));
 
-// ---- KB: list categories ----
-app.get("/api/kb/categories", async (_req, res) => {
+// --- Simple API: list KB categories ---
+app.get("/api/kb/categories", async (_req: Request, res: Response) => {
   try {
-    const items = await prisma.category.findMany({
-      where: { isActive: true },
+    const cats = await prisma.category.findMany({
+      select: { id: true, slug: true, name: true, isActive: true, createdAt: true, updatedAt: true },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, slug: true },
     });
-    res.json({ items });
+    res.json({ items: cats });
   } catch (err) {
-    console.error("Error fetching categories:", err);
-    res.status(500).json({ error: "internal error" });
+    console.error("GET /api/kb/categories error:", err);
+    res.status(500).json({ error: "Failed to load categories" });
   }
 });
 
-// ---- ADMIN: manual seed ----
-// Requires header: X-Admin-Secret: <your secret from Render env>
-app.post("/admin/seed", async (req, res) => {
-  const header = req.header("X-Admin-Secret");
-  const secret = process.env.ADMIN_SECRET || process.env.SECURITY_SECRET_KEY;
-  if (!secret || header !== secret) {
-    return res.status(401).json({ error: "unauthorized" });
-  }
-
+// (Optional) quick check route to see if seed is done
+app.get("/api/kb/seed-status", async (_req, res) => {
   try {
-    const result = await seedIfNeeded();
-    res.json({ ok: true, ...result });
-  } catch (err) {
-    console.error("Manual seed failed:", err);
-    res.status(500).json({ error: "seeding failed" });
+    const count = await prisma.category.count();
+    res.json({ categoryCount: count });
+  } catch (e) {
+    res.status(500).json({ error: "status check failed" });
   }
 });
 
-// ---- start server ----
-const PORT = process.env.PORT || 10000;
+// --- Start server, then seed in the background so boot is fast ---
 app.listen(PORT, () => {
   console.log(`FixGeni API listening on :${PORT}`);
+  // Kick off background seed (won't block health checks)
+  seedIfNeeded(prisma)
+    .then((didSeed) => {
+      if (didSeed) console.log("✅ Seed completed");
+      else console.log("ℹ️ Seed skipped (already seeded)");
+    })
+    .catch((e) => console.error("❌ Seed error", e));
+});
 
-  // AUTO-SEED on deploy (safe & idempotent)
-  setImmediate(async () => {
-    try {
-      const { seeded } = await seedIfNeeded();
-      if (seeded) {
-        console.log("✅ Auto-seed completed.");
-      } else {
-        console.log("ℹ️ Auto-seed skipped (already seeded).");
-      }
-    } catch (err) {
-      console.error("Seed on boot failed:", err);
-    }
-  });
+// Graceful shutdown
+process.on("SIGTERM", async () => {
+  await prisma.$disconnect();
+  process.exit(0);
 });
