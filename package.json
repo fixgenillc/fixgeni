@@ -26,3 +26,10 @@
     "typescript": "5.5.4"
   }
 }
+"devDependencies": {
+  "@types/express": "^4.17.21",
+  "@types/cors": "^2.8.17",
+  "@types/morgan": "^1.9.9",
+  "@types/node": "^20.11.30",
+  "typescript": "^5.3.3"
+}
