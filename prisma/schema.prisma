@@ -1,58 +1,38 @@
 // prisma/schema.prisma
-// --- Prisma Client generator & Postgres datasource ---
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "postgresql" // or "mysql" depending on your DB
   url      = env("DATABASE_URL")
 }
 
-// --- Enums used by KB articles ---
-enum Difficulty {
-  easy
-  medium
-  hard
-}
-
-enum ArticleStatus {
-  draft
-  published
-  archived
-}
-
-// --- Core models ---
-
 model Category {
-  id         Int         @id @default(autoincrement())
-  slug       String      @unique
-  name       String
-  isActive   Boolean     @default(true)
-  createdAt  DateTime    @default(now())
-
-  // Relation: one Category -> many KbArticles
-  articles   KbArticle[]
-
-  @@index([slug])
+  id          Int           @id @default(autoincrement())
+  name        String        @unique
+  subcategories SubCategory[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 }
 
-model KbArticle {
-  id              Int           @id @default(autoincrement())
-  slug            String        @unique
-  title           String
-  content         String        // could be HTML/markdown string
-  difficulty      Difficulty    @default(easy)
-  timeEstimateMin Int           @default(0)
-  toolsJson       Json          @default("[]")
-  stepsJson       Json          @default("[]")
-  status          ArticleStatus @default(published)
-  createdAt       DateTime      @default(now())
+model SubCategory {
+  id          Int       @id @default(autoincrement())
+  name        String
+  category    Category  @relation(fields: [categoryId], references: [id])
+  categoryId  Int
+  businesses  Business[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
 
-  // Foreign key
-  categoryId      Int
-  category        Category      @relation(fields: [categoryId], references: [id])
-
-  @@index([categoryId])
-  @@index([slug])
+model Business {
+  id            Int          @id @default(autoincrement())
+  name          String
+  description   String?
+  subcategory   SubCategory  @relation(fields: [subcategoryId], references: [id])
+  subcategoryId Int
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 }
