@@ -1,0 +1,38 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  icon        String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  articles    KbArticle[]
+}
+
+model KbArticle {
+  id                String   @id @default(cuid())
+  slug              String   @unique
+  title             String
+  categoryId        String
+  content           String
+  difficulty        String?
+  timeEstimateMin   Int?
+  toolsJson         Json?
+  stepsJson         Json?
+  status            String   @default("published")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  category          Category @relation(fields: [categoryId], references: [id])
+}
