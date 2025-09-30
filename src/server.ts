@@ -43,3 +43,40 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`FixGeni API listening on :${PORT}`);
 });
+import express from "express";
+import { prisma } from "./prisma"; // adjust path if needed
+
+const app = express();
+
+app.use(express.json());
+
+// --- Seed endpoint ---
+app.post("/admin/seed", async (req, res) => {
+  const key = req.headers["x-security-key"];
+  if (key !== process.env.SECURITY_SECRET_KEY) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+
+  try {
+    const categories = [
+      { name: "Plumbing", description: "Fixes for pipes, leaks, etc." },
+      { name: "Electrical", description: "Wiring, power issues, and repairs." },
+      { name: "Appliances", description: "Fridge, oven, washer, dryer fixes." },
+    ];
+
+    for (const cat of categories) {
+      await prisma.kbCategory.upsert({
+        where: { name: cat.name },
+        update: {},
+        create: cat,
+      });
+    }
+
+    res.json({ status: "ok", seeded: categories.length });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Seed failed" });
+  }
+});
+
+// ... keep your existing routes and listen()
