@@ -2,8 +2,7 @@ import { Router } from "express";
 
 const router = Router();
 
-// Example Geni endpoint
-router.get("/", (req, res) => {
+router.get("/", (_req, res) => {
   res.json({ message: "🤖 Geni Assistant Ready" });
 });
 
