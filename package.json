@@ -31,3 +31,14 @@
     "@types/morgan": "1.9.9"
   }
 }
+{
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/server.js",
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push",
+    "prisma:deploy": "prisma migrate deploy",
+    "postinstall": "prisma generate"
+  }
+}
