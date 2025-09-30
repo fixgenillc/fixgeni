@@ -15,15 +15,22 @@ app.use(cors());
 app.use(helmet());
 app.use(morgan("tiny"));
 
-// --- Health endpoints (used by Render) ---
+// --- Health endpoints ---
 app.get("/health", (_req: Request, res: Response) => res.status(200).send("ok"));
 app.get("/_health", (_req: Request, res: Response) => res.status(200).json({ ok: true }));
 
-// --- Simple API: list KB categories ---
+// --- List KB categories ---
 app.get("/api/kb/categories", async (_req: Request, res: Response) => {
   try {
     const cats = await prisma.category.findMany({
-      select: { id: true, slug: true, name: true, isActive: true, createdAt: true, updatedAt: true },
+      select: {
+        id: true,
+        slug: true,
+        name: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,   // ✅ only works if schema has updatedAt
+      },
       orderBy: { name: "asc" },
     });
     res.json({ items: cats });
@@ -33,7 +40,7 @@ app.get("/api/kb/categories", async (_req: Request, res: Response) => {
   }
 });
 
-// (Optional) quick check route to see if seed is done
+// --- Optional seed status ---
 app.get("/api/kb/seed-status", async (_req, res) => {
   try {
     const count = await prisma.category.count();
@@ -43,10 +50,9 @@ app.get("/api/kb/seed-status", async (_req, res) => {
   }
 });
 
-// --- Start server, then seed in the background so boot is fast ---
+// --- Start server, then run seed ---
 app.listen(PORT, () => {
   console.log(`FixGeni API listening on :${PORT}`);
-  // Kick off background seed (won't block health checks)
   seedIfNeeded(prisma)
     .then((didSeed) => {
       if (didSeed) console.log("✅ Seed completed");
@@ -55,7 +61,6 @@ app.listen(PORT, () => {
     .catch((e) => console.error("❌ Seed error", e));
 });
 
-// Graceful shutdown
 process.on("SIGTERM", async () => {
   await prisma.$disconnect();
   process.exit(0);
