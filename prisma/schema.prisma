@@ -8,31 +8,27 @@ datasource db {
 }
 
 model Category {
-  id          String   @id @default(cuid())
-  slug        String   @unique
-  name        String
-  description String?
-  icon        String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  articles    KbArticle[]
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  isActive  Boolean  @default(true)
+  articles  KbArticle[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model KbArticle {
-  id                String   @id @default(cuid())
-  slug              String   @unique
-  title             String
-  categoryId        String
-  content           String
-  difficulty        String?
-  timeEstimateMin   Int?
-  toolsJson         Json?
-  stepsJson         Json?
-  status            String   @default("published")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  category          Category @relation(fields: [categoryId], references: [id])
+  id             String   @id @default(cuid())
+  slug           String   @unique
+  title          String
+  content        String
+  difficulty     String
+  timeEstimateMin Int
+  toolsJson      Json
+  stepsJson      Json
+  status         String   @default("draft")
+  category       Category @relation(fields: [categoryId], references: [id])
+  categoryId     String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
